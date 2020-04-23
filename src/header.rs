@@ -14,7 +14,7 @@ use nom::{IResult, Parser};
 pub struct Header {
     pub format: Format,
     pub version: String,
-    pub elements: Vec<Element>,
+    pub elements: Vec<ElementDecl>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -29,7 +29,7 @@ pub enum PropertyType {
     Char,
     Uchar,
     Short,
-    UShort,
+    Ushort,
     Int,
     Uint,
     Float,
@@ -61,10 +61,17 @@ impl PropertyDecl {
             length_ty,
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            PropertyDecl::Single { name, .. } => name,
+            PropertyDecl::List { name, .. } => name,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Element {
+pub struct ElementDecl {
     pub name: String,
     pub count: usize,
     pub properties: Vec<PropertyDecl>,
@@ -124,10 +131,10 @@ fn element_decl(input: &[u8]) -> IResult<&[u8], (&[u8], usize)> {
     separated_pair(identifier, space1, integer)(input)
 }
 
-fn element(input: &[u8]) -> IResult<&[u8], Element> {
+fn element(input: &[u8]) -> IResult<&[u8], ElementDecl> {
     let (input, (name, count)) = terminated(element_decl, line_ending)(input)?;
     let (rest, properties) = separated_list1(line_ending, property_decl)(input)?;
-    let element = Element {
+    let element = ElementDecl {
         name: String::from_utf8(name.to_vec()).unwrap(),
         count,
         properties,
@@ -140,7 +147,7 @@ fn property_type(input: &[u8]) -> IResult<&[u8], PropertyType> {
         value(PropertyType::Char, tag("char")),
         value(PropertyType::Uchar, tag("uchar")),
         value(PropertyType::Short, tag("short")),
-        value(PropertyType::UShort, tag("ushort")),
+        value(PropertyType::Ushort, tag("ushort")),
         value(PropertyType::Int, tag("int")),
         value(PropertyType::Uint, tag("uint")),
         value(PropertyType::Float, tag("float")),
@@ -186,7 +193,7 @@ mod tests {
             format: Format::Ascii,
             version: "1.0".to_string(),
             elements: vec![
-                Element {
+                ElementDecl {
                     name: "vertex".to_string(),
                     count: 8,
                     properties: vec![
@@ -195,7 +202,7 @@ mod tests {
                         PropertyDecl::new_single("z".to_string(), PropertyType::Float),
                     ],
                 },
-                Element {
+                ElementDecl {
                     name: "face".to_string(),
                     count: 6,
                     properties: vec![PropertyDecl::new_list(
