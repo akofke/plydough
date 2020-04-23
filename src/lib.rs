@@ -9,6 +9,7 @@ use nom::character::complete::multispace0;
 
 pub mod header;
 
+#[derive(Debug, PartialEq)]
 pub struct PlyData {
     pub elements: HashMap<String, ElementData>,
 }
