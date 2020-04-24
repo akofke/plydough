@@ -1,11 +1,12 @@
-use crate::header::{ElementDecl, PropertyDecl, PropertyType, Header, Format};
-use nom::{IResult, Parser, Err};
+use crate::header::{ElementDecl, Format, Header, PropertyDecl, PropertyType};
+use nom::character::complete::multispace0;
+use nom::error::{ErrorKind, ParseError};
+use nom::lib::std::ops::RangeFrom;
+use nom::number::complete::*;
+use nom::sequence::terminated;
+use nom::{Err, IResult, Parser};
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use nom::error::{ParseError, ErrorKind};
-use nom::lib::std::ops::RangeFrom;
-use nom::sequence::terminated;
-use nom::character::complete::multispace0;
 
 pub mod header;
 
@@ -17,22 +18,31 @@ pub struct PlyData {
 impl PlyData {
     pub fn parse_with_header<'a>(header: &'_ Header, input: &'a [u8]) -> IResult<&'a [u8], Self> {
         let elements = Vec::with_capacity(header.elements.len());
-        let (input, elements) = header.elements.iter().try_fold((input, elements), |(input, mut elements), decl| {
-            let (input, el) = match header.format {
-                Format::Ascii => ElementData::parse_element::<Ascii>(decl, input)?,
-                Format::BinaryLittleEndian => ElementData::parse_element::<BinaryLittleEndian>(decl, input)?,
-                Format::BinaryBigEndian => ElementData::parse_element::<BinaryBigEndian>(decl, input)?,
-            };
-            elements.push(el);
-            Ok((input, elements))
-        })?;
+        let (input, elements) =
+            header
+                .elements
+                .iter()
+                .try_fold((input, elements), |(input, mut elements), decl| {
+                    let (input, el) = match header.format {
+                        Format::Ascii => ElementData::parse_element::<Ascii>(decl, input)?,
+                        Format::BinaryLittleEndian => {
+                            ElementData::parse_element::<BinaryLittleEndian>(decl, input)?
+                        }
+                        Format::BinaryBigEndian => {
+                            ElementData::parse_element::<BinaryBigEndian>(decl, input)?
+                        }
+                    };
+                    elements.push(el);
+                    Ok((input, elements))
+                })?;
 
-        let elements = header.elements.iter().zip(elements.into_iter())
+        let elements = header
+            .elements
+            .iter()
+            .zip(elements.into_iter())
             .map(|(decl, el)| (decl.name.clone(), el))
             .collect();
-        let data = Self {
-            elements
-        };
+        let data = Self { elements };
         Ok((input, data))
     }
 
@@ -49,7 +59,10 @@ pub struct ElementData {
 }
 
 impl ElementData {
-    pub fn parse_element<'a, P: ParseProperty>(decl: &'_ ElementDecl, input: &'a [u8]) -> IResult<&'a [u8], Self> {
+    pub fn parse_element<'a, P: ParseProperty>(
+        decl: &'_ ElementDecl,
+        input: &'a [u8],
+    ) -> IResult<&'a [u8], Self> {
         let mut property_vecs: Vec<_> = decl
             .properties
             .iter()
@@ -59,65 +72,68 @@ impl ElementData {
         let mut input = input;
         for _ in 0..decl.count {
             for (prop_data, prop_decl) in property_vecs.iter_mut().zip(decl.properties.iter()) {
-                let (rest, _) =  Self::parse_one_property::<P>(input, prop_decl, prop_data)?;
+                let (rest, _) = Self::parse_one_property::<P>(input, prop_decl, prop_data)?;
                 input = rest;
             }
         }
-        let properties = decl.properties.iter().zip(property_vecs.into_iter())
+        let properties = decl
+            .properties
+            .iter()
+            .zip(property_vecs.into_iter())
             .map(|(decl, prop)| (decl.name().to_string(), prop))
             .collect();
-        let element = Self {
-            properties
-        };
+        let element = Self { properties };
         Ok((input, element))
     }
 
-    fn parse_one_property<'a, P: ParseProperty>(input: &'a [u8], decl: &PropertyDecl, prop_data: &mut PropertyData) -> IResult<&'a [u8], ()> {
+    fn parse_one_property<'a, P: ParseProperty>(
+        input: &'a [u8],
+        decl: &PropertyDecl,
+        prop_data: &mut PropertyData,
+    ) -> IResult<&'a [u8], ()> {
         let input = match decl {
-            PropertyDecl::Single { ty, .. } => {
-                match (ty, prop_data) {
-                    (PropertyType::Char, PropertyData::Char(v)) => {
-                        let (input, prop) = P::char(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Uchar, PropertyData::Uchar(v)) => {
-                        let (input, prop) = P::uchar(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Short, PropertyData::Short(v)) => {
-                        let (input, prop) = P::short(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Ushort, PropertyData::Ushort(v)) => {
-                        let (input, prop) = P::ushort(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Int, PropertyData::Int(v)) => {
-                        let (input, prop) = P::int(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Uint, PropertyData::Uint(v)) => {
-                        let (input, prop) = P::uint(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Float, PropertyData::Float(v)) => {
-                        let (input, prop) = P::float(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    (PropertyType::Double, PropertyData::Double(v)) => {
-                        let (input, prop) = P::double(input)?;
-                        v.push(prop);
-                        input
-                    },
-                    _ => unreachable!()
+            PropertyDecl::Single { ty, .. } => match (ty, prop_data) {
+                (PropertyType::Char, PropertyData::Char(v)) => {
+                    let (input, prop) = P::char(input)?;
+                    v.push(prop);
+                    input
                 }
+                (PropertyType::Uchar, PropertyData::Uchar(v)) => {
+                    let (input, prop) = P::uchar(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Short, PropertyData::Short(v)) => {
+                    let (input, prop) = P::short(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Ushort, PropertyData::Ushort(v)) => {
+                    let (input, prop) = P::ushort(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Int, PropertyData::Int(v)) => {
+                    let (input, prop) = P::int(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Uint, PropertyData::Uint(v)) => {
+                    let (input, prop) = P::uint(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Float, PropertyData::Float(v)) => {
+                    let (input, prop) = P::float(input)?;
+                    v.push(prop);
+                    input
+                }
+                (PropertyType::Double, PropertyData::Double(v)) => {
+                    let (input, prop) = P::double(input)?;
+                    v.push(prop);
+                    input
+                }
+                _ => unreachable!(),
             },
             PropertyDecl::List { ty, length_ty, .. } => {
                 let (input, list_length) = Self::parse_list_length::<P>(input, *length_ty)?;
@@ -126,50 +142,53 @@ impl ElementData {
                         let (input, prop) = parse_list(input, list_length, P::char)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Uchar, PropertyData::ListUchar(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::uchar)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Short, PropertyData::ListShort(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::short)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Ushort, PropertyData::ListUshort(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::ushort)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Int, PropertyData::ListInt(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::int)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Uint, PropertyData::ListUint(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::uint)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Float, PropertyData::ListFloat(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::float)?;
                         v.push(prop);
                         input
-                    },
+                    }
                     (PropertyType::Double, PropertyData::ListDouble(v)) => {
                         let (input, prop) = parse_list(input, list_length, P::double)?;
                         v.push(prop);
                         input
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
-            },
+            }
         };
         Ok((input, ()))
     }
 
-    fn parse_list_length<P: ParseProperty>(input: &[u8], ty: PropertyType) -> IResult<&[u8], usize> {
+    fn parse_list_length<P: ParseProperty>(
+        input: &[u8],
+        ty: PropertyType,
+    ) -> IResult<&[u8], usize> {
         match ty {
             PropertyType::Char => (P::char).map(|n| n as usize).parse(input),
             PropertyType::Uchar => P::uchar.map(|n| n as usize).parse(input),
@@ -181,14 +200,11 @@ impl ElementData {
             PropertyType::Double => P::double.map(|n| n as usize).parse(input),
         }
     }
-
 }
 
-fn parse_list<F, T>(
-    input: &[u8], count: usize, parser: F
-) -> IResult<&[u8], SmallVec<[T; 4]>>
-    where
-        F: Fn(&[u8]) -> IResult<&[u8], T>,
+fn parse_list<F, T>(input: &[u8], count: usize, parser: F) -> IResult<&[u8], SmallVec<[T; 4]>>
+where
+    F: Fn(&[u8]) -> IResult<&[u8], T>,
 {
     let mut sv = SmallVec::with_capacity(count);
     let mut input = input;
@@ -264,13 +280,14 @@ pub trait ParseProperty {
 fn decimal_number<I, T, E: ParseError<I>>(input: I) -> IResult<I, T, E>
 where
     I: nom::AsBytes + nom::InputLength + nom::Slice<RangeFrom<usize>>,
-    T: lexical::FromLexical
+    T: lexical::FromLexical,
 {
     match T::from_lexical_partial(input.as_bytes()) {
-        Ok((value, processed)) => {
-            Ok((input.slice(processed..), value))
-        },
-        Err(_) => Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::ParseTo)))
+        Ok((value, processed)) => Ok((input.slice(processed..), value)),
+        Err(_) => Err(nom::Err::Error(E::from_error_kind(
+            input,
+            ErrorKind::ParseTo,
+        ))),
     }
 }
 
@@ -314,69 +331,69 @@ impl ParseProperty for Ascii {
 
 impl ParseProperty for BinaryLittleEndian {
     fn char(input: &[u8]) -> IResult<&[u8], i8> {
-        unimplemented!()
+        le_i8(input)
     }
 
     fn uchar(input: &[u8]) -> IResult<&[u8], u8> {
-        unimplemented!()
+        le_u8(input)
     }
 
     fn short(input: &[u8]) -> IResult<&[u8], i16> {
-        unimplemented!()
+        le_i16(input)
     }
 
     fn ushort(input: &[u8]) -> IResult<&[u8], u16> {
-        unimplemented!()
+        le_u16(input)
     }
 
     fn int(input: &[u8]) -> IResult<&[u8], i32> {
-        unimplemented!()
+        le_i32(input)
     }
 
     fn uint(input: &[u8]) -> IResult<&[u8], u32> {
-        unimplemented!()
+        le_u32(input)
     }
 
     fn float(input: &[u8]) -> IResult<&[u8], f32> {
-        unimplemented!()
+        le_f32(input)
     }
 
     fn double(input: &[u8]) -> IResult<&[u8], f64> {
-        unimplemented!()
+        le_f64(input)
     }
 }
 
 impl ParseProperty for BinaryBigEndian {
     fn char(input: &[u8]) -> IResult<&[u8], i8> {
-        unimplemented!()
+        be_i8(input)
     }
 
     fn uchar(input: &[u8]) -> IResult<&[u8], u8> {
-        unimplemented!()
+        be_u8(input)
     }
 
     fn short(input: &[u8]) -> IResult<&[u8], i16> {
-        unimplemented!()
+        be_i16(input)
     }
 
     fn ushort(input: &[u8]) -> IResult<&[u8], u16> {
-        unimplemented!()
+        be_u16(input)
     }
 
     fn int(input: &[u8]) -> IResult<&[u8], i32> {
-        unimplemented!()
+        be_i32(input)
     }
 
     fn uint(input: &[u8]) -> IResult<&[u8], u32> {
-        unimplemented!()
+        be_u32(input)
     }
 
     fn float(input: &[u8]) -> IResult<&[u8], f32> {
-        unimplemented!()
+        be_f32(input)
     }
 
     fn double(input: &[u8]) -> IResult<&[u8], f64> {
-        unimplemented!()
+        be_f64(input)
     }
 }
 

@@ -144,14 +144,14 @@ fn element(input: &[u8]) -> IResult<&[u8], ElementDecl> {
 
 fn property_type(input: &[u8]) -> IResult<&[u8], PropertyType> {
     alt((
-        value(PropertyType::Char, tag("char")),
-        value(PropertyType::Uchar, tag("uchar")),
-        value(PropertyType::Short, tag("short")),
-        value(PropertyType::Ushort, tag("ushort")),
-        value(PropertyType::Int, tag("int")),
-        value(PropertyType::Uint, tag("uint")),
-        value(PropertyType::Float, tag("float")),
-        value(PropertyType::Double, tag("double")),
+        value(PropertyType::Char, alt((tag("char"), tag("int8")))),
+        value(PropertyType::Uchar, alt((tag("uchar"), tag("uint8")))),
+        value(PropertyType::Short, alt((tag("short"), tag("int16")))),
+        value(PropertyType::Ushort, alt((tag("ushort"), tag("uint16")))),
+        value(PropertyType::Int, alt((tag("int"), tag("int32")))),
+        value(PropertyType::Uint, alt((tag("uint"), tag("uint32")))),
+        value(PropertyType::Float, alt((tag("float"), tag("float32")))),
+        value(PropertyType::Double, alt((tag("double"), tag("float64")))),
     ))(input)
 }
 
