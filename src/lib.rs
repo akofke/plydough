@@ -1,6 +1,6 @@
 use crate::header::{ElementDecl, Format, Header, PropertyDecl, PropertyType};
 use nom::character::complete::multispace0;
-use nom::error::{ErrorKind, ParseError};
+use nom::error::{ErrorKind, ParseError, Error};
 use nom::lib::std::ops::RangeFrom;
 use nom::number::complete::*;
 use nom::sequence::terminated;
@@ -46,9 +46,9 @@ impl PlyData {
         Ok((input, data))
     }
 
-    pub fn parse_complete(input: &[u8]) -> Result<Self, Err<(&[u8], ErrorKind)>> {
+    pub fn parse_complete(input: &[u8]) -> Result<Self, Err<Error<&[u8]>>> {
         let (input, header) = header::header(input)?;
-        let (rest, data) = Self::parse_with_header(&header, input)?;
+        let (_rest, data) = Self::parse_with_header(&header, input)?;
         Ok(data)
     }
 }
@@ -429,7 +429,6 @@ mod tests {
         elements.insert("face".to_string(), ElementData { properties });
 
         let data = PlyData::parse_complete(file)
-            .map_err(|e| e.map_input(|input| std::str::from_utf8(input).unwrap()))
             .unwrap();
 
         assert_eq!(data.elements, elements);

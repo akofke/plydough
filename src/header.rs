@@ -215,7 +215,6 @@ mod tests {
         };
 
         let (_rest, header) = header(file)
-            .map_err(|e| e.map_input(|input| std::str::from_utf8(input).unwrap()))
             .unwrap();
         assert_eq!(header, expected);
     }
